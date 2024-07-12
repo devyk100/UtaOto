@@ -134,7 +134,7 @@ sf_count_t audioStream::BufferState::resumePlayback()
     return 0;
 }
 
-int audioStream::BufferState::audioStreamCallback(const void* inputBuffer, void* outputBuffer, unsigned long framesPerBuffer, const PaStreamCallbackTimeInfo* timeInfo, PaStreamCallbackFlags statusFlags, void* userData)
+int audioStream::BufferState::defaultAudioStreamCallback(const void* inputBuffer, void* outputBuffer, unsigned long framesPerBuffer, const PaStreamCallbackTimeInfo* timeInfo, PaStreamCallbackFlags statusFlags, void* userData)
 {
     auto data = static_cast<BufferState*>(userData);
     auto out = static_cast<float*>(outputBuffer);
@@ -170,7 +170,14 @@ int audioStream::BufferState::audioStreamCallback(const void* inputBuffer, void*
 
 sf_count_t audioStream::BufferState::openDefaultStream()
 {
-    Pa_OpenDefaultStream(&stream, 0, static_cast<int>(noOfChannels), paFloat32, (double)sampleRate, 256, audioStreamCallback, this);
+    if(CustomCallback.isCustom)
+    {
+        Pa_OpenDefaultStream(&stream, 0, static_cast<int>(noOfChannels), paFloat32, (double)sampleRate, 512, CustomCallback.callback, CustomCallback.data);
+    }
+    else
+    {
+        Pa_OpenDefaultStream(&stream, 0, static_cast<int>(noOfChannels), paFloat32, (double)sampleRate, 512, defaultAudioStreamCallback, this);
+    }
     return paContinue;
 }
 
@@ -188,5 +195,13 @@ void audioStream::BufferState::checkError(PaError err)
         this->~BufferState();
         throw std::runtime_error(errString);
     }
+}
+
+bool audioStream::BufferState::setCustomCallback(int (*callback)(const void*, void*, unsigned long, const PaStreamCallbackTimeInfo*, PaStreamCallbackFlags, void*), void* data)
+{
+    this->CustomCallback.callback = callback;
+    this->CustomCallback.isCustom = true;
+    this->CustomCallback.data = data;
+    return true;
 }
 
