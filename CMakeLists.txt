@@ -4,13 +4,12 @@ project(audio_project_cpp)
 set(CMAKE_CXX_STANDARD 20)
 
 add_executable(audio_project_cpp main.cpp
-        include/audio.h
-        cpp/utils.cpp
-        include/utils.h
         include/audiofile.h
         cpp/audiofile.cpp
         include/audiostream.h
-        cpp/audiostream.cpp)
+        cpp/audiostream.cpp
+        cpp/synthesizer.cpp
+        include/synthesizer.h)
 
 find_package(portaudio CONFIG REQUIRED)
 find_package(SndFile CONFIG REQUIRED)

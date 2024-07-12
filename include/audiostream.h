@@ -6,6 +6,7 @@
 #define AUDIOSTREAM_H
 #define BUFFER_SIZE (1024*400)
 #define NO_OF_CHANNELS (2)
+#define SAMPLE_RATE (44100)
 #include <portaudio.h>
 #include <sndfile.h>
 #include <thread>
@@ -22,39 +23,35 @@ namespace audioStream
     class BufferState
     {
         private:
+            PaError err;
             float* prevBuffer, *nextBuffer, *nextNextBuffer, *temp;
-
+            PaStream* stream;
             std::pmr::vector<FileChannel> FileChannels;
-
+            static int audioStreamCallback(const void* inputBuffer, void* outputBuffer, unsigned long framesPerBuffer, const PaStreamCallbackTimeInfo* timeInfo, PaStreamCallbackFlags statusFlags, void* userData);
             // std::pmr::vector<std::pmr::vector<float*>> tempBuffers;
         // support for modified file buffers, as well as synthesizers are to be added.
         public:
             sf_count_t position;
+            bool isPaused;
             sf_count_t noOfChannels;
             sf_count_t bufferSize;
             sf_count_t fetchNextBuffers(bool &&isStartPlayback);
             std::thread nextNextFetcherThread;
-        long int sampleRate;
+            long int sampleRate;
             float *currBuffer;
-            BufferState();
+            BufferState(PaStream *stream);
             void addFile(const char* filename);
             static void checkError(SNDFILE* sndfile);
+            void checkError(PaError err);
+            sf_count_t openDefaultStream();
+            sf_count_t closeStream();
             sf_count_t startPlayback();
             sf_count_t refreshBuffers();
+            sf_count_t pausePlayback();
+            sf_count_t resumePlayback();
             ~BufferState();
 
     };
-
-    struct bufferData
-    {
-        float* audioBuffer;
-        sf_count_t bufferSize = 1024;
-        sf_count_t position;
-    };
-
-    int audioStreamCallback(const void* inputBuffer, void *outputBuffer, unsigned long framesPerBuffer, const PaStreamCallbackTimeInfo* timeInfo, PaStreamCallbackFlags statusFlags, void* userData);
-
-
 
 };
 

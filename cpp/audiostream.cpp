@@ -7,36 +7,10 @@
 #include <cstring>
 #include <iostream>
 
-int audioStream::audioStreamCallback(const void* inputBuffer, void* outputBuffer, unsigned long framesPerBuffer, const PaStreamCallbackTimeInfo* timeInfo, PaStreamCallbackFlags statusFlags, void* userData)
-{
-    auto data = static_cast<BufferState*>(userData);
-    auto out = static_cast<float*>(outputBuffer);
-    static_cast<void>(inputBuffer);
-
-    for(unsigned int i = 0; i < framesPerBuffer; i++)
-    {
-        if(data->position < data->bufferSize)
-        {
-            *(out++) = data->currBuffer[data->position++];
-            *(out++) = data->currBuffer[data->position++];
-            // std::cout << data->position << " / " << data->bufferSize << std::endl;
-        }
-        else
-        {
-            *(out++) = 0.0f;
-            *(out++) = 0.0f;
-            data->refreshBuffers();
-            std::cout << data->position << " / " << data->bufferSize;
-            // std::cout << "End of the buffer reached\n";
-        }
-    }
-    return paContinue;
-}
-
-
     // support for modified file buffers, as well as synthesizers are to be added.
-audioStream::BufferState::BufferState():bufferSize(BUFFER_SIZE), noOfChannels(NO_OF_CHANNELS), position(0), sampleRate(-1)
+audioStream::BufferState::BufferState(PaStream* stream):bufferSize(BUFFER_SIZE), noOfChannels(NO_OF_CHANNELS), position(0), sampleRate(-1), isPaused(false)
 {
+    err = Pa_Initialize();
     prevBuffer = new float[bufferSize * noOfChannels];
     currBuffer = new float[bufferSize * noOfChannels];
     nextBuffer = new float[bufferSize * noOfChannels];
@@ -74,6 +48,7 @@ void audioStream::BufferState::checkError(SNDFILE* sndfile)
 
 sf_count_t audioStream::BufferState::startPlayback()
 {
+    isPaused = false;
     sf_count_t readCount;
     memset(currBuffer, 0, noOfChannels*bufferSize*sizeof(float));
     for(auto it: FileChannels)
@@ -117,6 +92,7 @@ sf_count_t audioStream::BufferState::fetchNextBuffers(bool &&isStartPlayback)
         nextBuffer = nextNextBuffer;
         nextNextBuffer = tempPt;
         fetchNextBuffers(false);
+        resumePlayback();
     }
     return 0;
 }
@@ -143,4 +119,74 @@ audioStream::BufferState::~BufferState()
     delete[] currBuffer;
     delete[] nextBuffer;
     delete[] nextNextBuffer;
+    Pa_Terminate();
 }
+
+sf_count_t audioStream::BufferState::pausePlayback()
+{
+    Pa_StopStream(stream);
+    return 0;
+}
+
+sf_count_t audioStream::BufferState::resumePlayback()
+{
+    Pa_StartStream(stream);
+    return 0;
+}
+
+int audioStream::BufferState::audioStreamCallback(const void* inputBuffer, void* outputBuffer, unsigned long framesPerBuffer, const PaStreamCallbackTimeInfo* timeInfo, PaStreamCallbackFlags statusFlags, void* userData)
+{
+    auto data = static_cast<BufferState*>(userData);
+    auto out = static_cast<float*>(outputBuffer);
+    static_cast<void>(inputBuffer);
+
+    for(unsigned int i = 0; i < framesPerBuffer; i++)
+    {
+        if(data->isPaused)
+        {
+            *(out++) = -1.0f;
+            *(out++) = -1.0f;
+            return paContinue;
+        }
+
+        if(data->position < data->bufferSize)
+        {
+            *(out++) = data->currBuffer[data->position++];
+            *(out++) = data->currBuffer[data->position++];
+            // std::cout << data->position << " / " << data->bufferSize << std::endl;
+        }
+        else
+        {
+            *(out++) = 0.0f;
+            *(out++) = 0.0f;
+            data->refreshBuffers();
+            std::cout << data->position << " / " << data->bufferSize;
+            // std::cout << "End of the buffer reached\n";
+        }
+    }
+    return paContinue;
+}
+
+
+sf_count_t audioStream::BufferState::openDefaultStream()
+{
+    Pa_OpenDefaultStream(&stream, 0, static_cast<int>(noOfChannels), paFloat32, (double)sampleRate, 256, audioStreamCallback, this);
+    return paContinue;
+}
+
+sf_count_t audioStream::BufferState::closeStream()
+{
+    Pa_CloseStream(stream);
+    return paComplete;
+}
+
+void audioStream::BufferState::checkError(PaError err)
+{
+    if(err != paNoError)
+    {
+        const std::string errString = std::string("Error occured ") + Pa_GetErrorText(err);
+        this->~BufferState();
+        throw std::runtime_error(errString);
+    }
+}
+
