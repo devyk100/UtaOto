@@ -1,43 +1,16 @@
+#include <cstring>
 #include <iostream>
 #include <portaudio.h>
-
+#include <sndfile.h>
 #include "include/audio.h"
+#include "include/audiostream.h"
+#include "include/utils.h"
 
 #define SAMPLE_RATE (44100)
-struct paTestData
-{
-    float left_phase;
-    float right_phase;
-} data;
 
-// static paTestData data;
 
-static int patestCallback(const void* inputBuffer, void *outputBuffer, unsigned long framesPerBuffer, const PaStreamCallbackTimeInfo* timeInfo, PaStreamCallbackFlags statusFlags, void* userData )
-{
-    // auto *data = (paTestData*)userData;
-    auto *data = static_cast<paTestData*>(userData);
-    auto out = static_cast<float*>(outputBuffer);
-    (void) inputBuffer;
-    data -> left_phase = -1.0f;
-    data->right_phase = -1.0f;
+// static audioStream::paTestData data;
 
-    int sec = static_cast<int>(timeInfo->currentTime);
-    for(unsigned int i = 0; i < framesPerBuffer; i++)
-    {
-        *(out++) = data->left_phase;
-        *(out++) = data->right_phase;
-
-        // std::cout << timeInfo;
-
-        data->right_phase += 0.015f*(float)((sec%2)*3 + 1);
-        data->left_phase += 0.2f;
-
-        if(data->left_phase >= 1.0f) data->left_phase -= 2.0f;
-        if(data->right_phase >= 1.0f) data->right_phase -= 2.0f;
-    }
-    std::cout << timeInfo->currentTime << " ";
-    return 0;
-}
 
 void errCheck(PaError err)
 {
@@ -47,25 +20,58 @@ void errCheck(PaError err)
     }
 }
 
+const char* filename = "../audio.mp3";
+
 int main()
 {
-    std::cout << "Hello, World!" << std::endl;
-    PaStream *stream;
+    audioStream::BufferState fdata;
+    fdata.addFile(filename);
+    fdata.addFile("../audio2.mp3");
+    fdata.addFile("../audio3.mp3");
+
+    PaStream *stream = nullptr;
+    PaStreamParameters p;
     PaError err;
-    audio::PaInitialize a;
+    err = Pa_Initialize();
     errCheck(err);
-    data.left_phase = -1.0f;
-    data.right_phase = -1.0f;
-    err = Pa_OpenDefaultStream(
-        &stream, 0, 2, paFloat32, SAMPLE_RATE, 256, patestCallback, &data);
+    fdata.startPlayback();
+    err = Pa_OpenDefaultStream(&stream, 0, (int)fdata.noOfChannels, paFloat32, (double)fdata.sampleRate, 256, audioStream::audioStreamCallback, &fdata);
+
+    // err = Pa_WriteStream(stream, fdata.audioBuffer, sfInfo.frames);
     errCheck(err);
 
-    err = Pa_StartStream(stream);
     errCheck(err);
-    Pa_Sleep(1000*10);
+    err = Pa_StartStream(stream);
+    // err = Pa_WriteStream(stream, fdata.audioBuffer, written);
+    // int BUFFER_LEN = sfInfo.frames * sfInfo.channels;
+    // sf_count_t readCount = 0;
+    // float data[BUFFER_LEN];
+    // int subFormat = sfInfo.format;
+    // // ::memset(data, 0, sizeof(data));
+    // while ((readCount = sf_read_float(sndFile, fdata.audioBuffer, fdata.bufferSize)))
+    // {
+    //     if (subFormat == SF_FORMAT_FLOAT || subFormat == SF_FORMAT_DOUBLE)
+    //     {
+    //         int m = 0;
+    //         for (m = 0 ; m < readCount ; ++m)
+    //         {
+    //             data[m] *= 1.0f;
+    //         }
+    //     }
+    //     err = Pa_WriteStream(stream, data, BUFFER_LEN);
+    //     errCheck(err);
+    //     ::memset(data, 0, sizeof(data));
+    // }
+
+    // sf_close(sndFile);
+    errCheck(err);
+
+    std::cin.get();
+    std::cout << "After sleep\n";
     err = Pa_StopStream(stream);
     errCheck(err);
     err = Pa_CloseStream(stream);
     errCheck(err);
+    err = Pa_Terminate();
     return 0;
 }
